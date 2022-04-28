@@ -1,2 +1,70 @@
 # HAProxy-Setup-for-Securing-HTTP-Traffic-with-SSL-TLS
 HAProxy Setup
+
+ENV: RHEL
+
+OBJECTIVE 1 : Secure the site with SSL/TLS
+-Only accept HTTPS traffic at the load balancer level. 
+-Edit the configuration file:
+
+$sudo vim /etc/haproxy/haproxy.cfg
+// modify the line "Single Frontend for http on port 80" as 
+  
+-----------------------------------------------------------------------   
+# Single frontend for https
+frontend https-in
+    bind *:443 ssl crt /etc/haproxy/certs/ force-tlsv12
+    mode http
+    acl p_ext_txt path_end -i .txt
+    acl p_folder_textfiles path_beg -i /textfiles/
+    http-request set-path /textfiles/%[path] if !p_folder_textfiles p_ext_txt
+    acl site-1 hdr(host) -i www.site1.com
+    acl site-2 hdr(host) -i www.site2.com
+    use_backend site1 if site-1
+    use_backend site2 if site-2
+
+$wq!
+----------------------------------------------------------------------
+
+-Restart HAProxy. 
+$sudo systemctl restart haproxy
+
+-Check the new configuration with curl 
+$ curl -k https://www.site1.com/test.txt
+
+-Try HTTP to validate the connection is being refused.
+$ curl -k https://www.site1.com/test.txt
+// connection should be refused. 
+
+
+OBJECTIVE 2 : Redirect HTTP Traffic to HTTPS
+-Configure HAProxy to accept HTTP traffic and redirect it to HTTPS.
+-Modify the config file. 
+
+$sudo vim /etc/haproxy/haproxy.cfg
+
+----------------------------------------------------------------------
+```
+# Single frontend for http and https
+frontend http-https-in
+    bind *:80
+    bind *:443 ssl crt /etc/haproxy/certs/ force-tlsv12
+    mode http
+    http-request redirect scheme https unless { ssl_fc }
+    acl p_ext_txt path_end -i .txt
+    acl p_folder_textfiles path_beg -i /textfiles/
+    http-request set-path /textfiles/%[path] if !p_folder_textfiles p_ext_txt
+    acl site-1 hdr(host) -i www.site1.com
+    acl site-2 hdr(host) -i www.site2.com
+    use_backend site1 if site-1
+    use_backend site2 if site-2
+```
+
+$wq!
+----------------------------------------------------------------------
+
+-Restart HAProxy. 
+$sudo systemctl restart haproxy
+
+-Test the http request if it's redirected to HTTPS or not. 
+$ curl -kL https://www.site1.com/test.txt
